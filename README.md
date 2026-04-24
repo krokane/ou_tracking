@@ -2,6 +2,13 @@
 
 A personal dashboard for tracking MLB win total and playoff bets across a group. Pulls live standings from the MLB Stats API, auto-resolves bets as the season progresses, and shows per-bettor P&L summaries.
 
+## Live Site
+
+| URL | Access |
+|---|---|
+| `https://ou-tracking.fly.dev` | Private (password required) |
+| `https://ou-tracking.fly.dev/public` | Public read-only |
+
 ## Features
 
 - **Two bet types** — win totals (over/under a win number) and playoff bets (will/won't win division or make playoffs)
@@ -41,20 +48,3 @@ Set them before running:
 ```bash
 APP_PASSWORD=yourpassword SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))') uv run python main.py
 ```
-
-## Live Site
-
-| URL | Access |
-|---|---|
-| `https://ou-tracking.fly.dev` | Private (password required) |
-| `https://ou-tracking.fly.dev/public` | Public read-only |
-
-## Deployment
-
-Hosted on [Fly.io](https://fly.io). The database lives on a persistent volume and survives deploys. To push an update:
-
-```bash
-flyctl deploy
-```
-
-The app auto-sleeps when idle and wakes on the next request.
