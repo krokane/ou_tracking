@@ -1,0 +1,10 @@
+[project]
+name = "ou-tracking"
+version = "0.1.0"
+description = "MLB Over/Under Bet Tracker"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "flask>=3.0",
+    "requests>=2.31",
+]

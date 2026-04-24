@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB O/U Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --accent:    #2f81f7;
+      --accent-dk: #1a6ed8;
+      --win:       #3fb950;
+      --loss:      #f85149;
+      --push:      #d29922;
+      --radius:    8px;
+    }
+
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px; line-height: 1.5; min-height: 100vh;
+    }
+
+    /* ---- Header ---- */
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; flex: 1; display: flex; align-items: center; gap: 8px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    #last-updated { font-size: 12px; color: var(--muted); }
+
+    /* ---- Tabs ---- */
+    .tab-bar { display: flex; padding: 0 24px; border-bottom: 1px solid var(--border); }
+    .tab {
+      padding: 10px 20px; cursor: pointer; font-size: 14px; font-weight: 500;
+      color: var(--muted); border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s; user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; padding: 20px 24px; }
+    .tab-panel.active { display: block; }
+
+    /* ---- Buttons ---- */
+    .btn {
+      padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: 1px solid transparent;
+      transition: background .15s, opacity .15s; font-family: inherit;
+    }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-dk); }
+    .btn-ghost { background: transparent; border-color: var(--border); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: var(--surface2); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-del { background: transparent; color: var(--muted); border-color: transparent; }
+    .btn-del:hover { color: var(--loss); }
+
+    /* ---- Form ---- */
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .form-group input, .form-group select {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 8px 10px; font-size: 14px; font-family: inherit;
+      transition: border-color .15s; width: 100%;
+    }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+    .form-group select option { background: var(--surface); }
+    .flash { padding: 10px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; display: none; }
+    .flash.success { background: rgba(63,185,80,.15); color: var(--win); border: 1px solid rgba(63,185,80,.3); }
+    .flash.error   { background: rgba(248,81,73,.15); color: var(--loss); border: 1px solid rgba(248,81,73,.3); }
+
+    /* ---- Bets two-column grid ---- */
+    .bets-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ---- Per-bettor section ---- */
+    .bettor-section { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+    .bettor-name-bar {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+      padding: 10px 14px;
+      font-size: 15px; font-weight: 700;
+    }
+    .bettor-stat-row {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border); border-bottom: none; border-top: none;
+      background: var(--surface);
+    }
+    .bettor-stat {
+      padding: 10px 14px; display: flex; flex-direction: column; gap: 2px;
+      border-right: 1px solid var(--border);
+    }
+    .bettor-stat:last-child { border-right: none; }
+    .bettor-stat .bs-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .bettor-stat .bs-value { font-size: 16px; font-weight: 700; }
+    .bettor-section .table-wrap { border-radius: 0 0 var(--radius) var(--radius); }
+
+    /* ---- Table ---- */
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      background: var(--surface); padding: 9px 12px; text-align: left;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 9px 12px; vertical-align: middle; }
+    .team-cell { font-weight: 600; white-space: nowrap; }
+    .record-badge { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+
+    /* ---- Bet badges ---- */
+    .ou-badge {
+      display: inline-block; padding: 2px 6px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+    }
+    .ou-badge.over  { background: rgba(63,185,80,.15); color: var(--win); }
+    .ou-badge.under { background: rgba(248,81,73,.15); color: var(--loss); }
+    .playoff-designation {
+      display: inline-block; padding: 2px 7px; border-radius: 4px;
+      font-size: 11px; font-weight: 600;
+      background: rgba(47,129,247,.15); color: var(--accent);
+    }
+    .result-badge {
+      display: inline-block; padding: 3px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    }
+    .result-badge.win     { background: rgba(63,185,80,.15); color: var(--win); }
+    .result-badge.loss    { background: rgba(248,81,73,.15); color: var(--loss); }
+    .result-badge.push    { background: rgba(210,153,34,.15); color: var(--push); }
+    .result-badge.pending { background: rgba(125,133,144,.15); color: var(--muted); }
+
+    /* ---- Standings ---- */
+    .league-section { margin-bottom: 28px; }
+    .league-section h3 { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .standings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .division-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .division-header {
+      background: var(--surface2); padding: 9px 14px;
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      letter-spacing: .05em; text-transform: uppercase; border-bottom: 1px solid var(--border);
+    }
+    .standings-table { width: 100%; border-collapse: collapse; }
+    .standings-table th {
+      background: transparent; padding: 6px 10px;
+      font-size: 10px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .standings-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .standings-table tr:last-child td { border-bottom: none; }
+    .standings-table tr.in-playoffs { background: rgba(47,129,247,.04); }
+    .standings-table tr:hover td { background: var(--surface2); }
+    .pb { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 800; letter-spacing: .03em; }
+    .pb-div { background: rgba(47,129,247,.2); color: var(--accent); }
+    .pb-wc  { background: rgba(63,185,80,.15); color: var(--win); }
+    .streak-w { color: var(--win); font-weight: 600; }
+    .streak-l { color: var(--loss); font-weight: 600; }
+
+    /* ---- Misc ---- */
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+    .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .filter-bar input, .filter-bar select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 6px 10px; font-size: 13px; font-family: inherit;
+    }
+    .filter-bar input:focus, .filter-bar select:focus { outline: none; border-color: var(--accent); }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 900px) {
+      .bets-grid { grid-template-columns: 1fr; }
+      .standings-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      header { padding: 10px 14px; }
+      #last-updated { display: none; }
+      .tab-bar { padding: 0 14px; }
+      .tab { padding: 8px 12px; font-size: 13px; }
+      .tab-panel { padding: 12px 14px; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .filter-bar { flex-direction: column; }
+      .filter-bar input, .filter-bar select { width: 100%; }
+      .bettor-stat { padding: 8px 10px; }
+      .bettor-stat .bs-value { font-size: 13px; }
+    }
+
+    /* ---- Modal ---- */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.6); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px; width: 100%; max-width: 440px; margin: 16px;
+    }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-header h2 { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px; }
+    .modal-fields { display: flex; flex-direction: column; gap: 14px; }
+    .modal-row { display: grid; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- Header                                                        -->
+<!-- ============================================================ -->
+<header>
+  <h1><span>⚾</span> MLB O/U Tracker</h1>
+  <div class="header-right">
+    <span id="last-updated"></span>
+    {% if not readonly %}
+    <button class="btn btn-ghost" onclick="refreshStandings()" id="refresh-btn">Refresh Standings</button>
+    <a href="/logout" class="btn btn-ghost" style="font-size:13px;">Sign out</a>
+    {% else %}
+    <a href="/login" class="btn btn-ghost" style="font-size:13px;">Sign in</a>
+    {% endif %}
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<!-- Tabs                                                          -->
+<!-- ============================================================ -->
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('bets', this)">My Bets</div>
+  <div class="tab" onclick="switchTab('standings', this)">Standings</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- BETS TAB                                                      -->
+<!-- ============================================================ -->
+<div id="tab-bets" class="tab-panel active">
+  <div class="toolbar">
+    <div class="filter-bar">
+      <input type="text" id="filter-bettor" placeholder="Bettor…" oninput="renderBets()" />
+      <input type="text" id="filter-team"   placeholder="Team…"   oninput="renderBets()" />
+      <select id="filter-result" onchange="renderBets()">
+        <option value="">All results</option>
+        <option value="pending">Pending</option>
+        <option value="win">Win</option>
+        <option value="loss">Loss</option>
+        <option value="push">Push</option>
+      </select>
+    </div>
+    {% if not readonly %}
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="openWinTotalModal()">+ Win Total Bet</button>
+      <button class="btn btn-ghost" onclick="openPlayoffModal()">+ Playoff Bet</button>
+    </div>
+    {% endif %}
+  </div>
+  <div id="bets-container">
+    <div class="empty-state"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STANDINGS TAB                                                 -->
+<!-- ============================================================ -->
+<div id="tab-standings" class="tab-panel">
+  <div id="standings-container">
+    <div class="empty-state">
+      <div class="spinner"></div>
+      <p style="margin-top:10px">Loading standings…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Win Total Modal                                               -->
+<!-- ============================================================ -->
+<div id="modal-overlay" class="modal-overlay" onclick="closeWinTotalModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="modal-title">Add Win Total Bet</h2>
+      <button class="modal-close" onclick="closeWinTotalModal()">&times;</button>
+    </div>
+    <div id="form-flash" class="flash"></div>
+    <form id="bet-form" onsubmit="submitWinTotalBet(event)">
+      <div class="modal-fields">
+        <div class="form-group">
+          <label>Team</label>
+          <select id="f-team" required>
+            <option value="">Select a team…</option>
+            <optgroup label="AL East">
+              <option>Baltimore Orioles</option><option>Boston Red Sox</option>
+              <option>New York Yankees</option><option>Tampa Bay Rays</option>
+              <option>Toronto Blue Jays</option>
+            </optgroup>
+            <optgroup label="AL Central">
+              <option>Chicago White Sox</option><option>Cleveland Guardians</option>
+              <option>Detroit Tigers</option><option>Kansas City Royals</option>
+              <option>Minnesota Twins</option>
+            </optgroup>
+            <optgroup label="AL West">
+              <option>Houston Astros</option><option>Los Angeles Angels</option>
+              <option>Athletics</option><option>Seattle Mariners</option>
+              <option>Texas Rangers</option>
+            </optgroup>
+            <optgroup label="NL East">
+              <option>Atlanta Braves</option><option>Miami Marlins</option>
+              <option>New York Mets</option><option>Philadelphia Phillies</option>
+              <option>Washington Nationals</option>
+            </optgroup>
+            <optgroup label="NL Central">
+              <option>Chicago Cubs</option><option>Cincinnati Reds</option>
+              <option>Milwaukee Brewers</option><option>Pittsburgh Pirates</option>
+              <option>St. Louis Cardinals</option>
+            </optgroup>
+            <optgroup label="NL West">
+              <option>Arizona Diamondbacks</option><option>Colorado Rockies</option>
+              <option>Los Angeles Dodgers</option><option>San Diego Padres</option>
+              <option>San Francisco Giants</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bettor Name</label>
+          <input id="f-bettor" type="text" placeholder="e.g. Kevin" required list="bettor-list" autocomplete="off" />
+        </div>
+        <div class="modal-row" style="grid-template-columns:1fr 1fr 1fr 1fr;">
+          <div class="form-group">
+            <label>Over / Under</label>
+            <select id="f-ou" required>
+              <option value="">—</option>
+              <option value="over">Over</option>
+              <option value="under">Under</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Win Total</label>
+            <input id="f-number" type="number" step="0.5" min="0" placeholder="85.5" required />
+          </div>
+          <div class="form-group">
+            <label>Juice</label>
+            <input id="f-line" type="number" step="any" placeholder="-110" required />
+          </div>
+          <div class="form-group">
+            <label>Amount ($)</label>
+            <input id="f-amount" type="number" step="any" min="0" placeholder="100" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" id="modal-submit-btn" class="btn btn-primary" style="flex:1;">Add Bet</button>
+        <button type="button" class="btn btn-ghost" onclick="closeWinTotalModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- Playoff Modal                                                 -->
+<!-- ============================================================ -->
+<div id="playoff-modal-overlay" class="modal-overlay" onclick="closePlayoffModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="playoff-modal-title">Add Playoff Bet</h2>
+      <button class="modal-close" onclick="closePlayoffModal()">&times;</button>
+    </div>
+    <div id="playoff-flash" class="flash"></div>
+    <form id="playoff-form" onsubmit="submitPlayoffBet(event)">
+      <div class="modal-fields">
+        <div class="form-group">
+          <label>Team</label>
+          <select id="pm-team" required>
+            <option value="">Select a team…</option>
+            <optgroup label="AL East">
+              <option>Baltimore Orioles</option><option>Boston Red Sox</option>
+              <option>New York Yankees</option><option>Tampa Bay Rays</option>
+              <option>Toronto Blue Jays</option>
+            </optgroup>
+            <optgroup label="AL Central">
+              <option>Chicago White Sox</option><option>Cleveland Guardians</option>
+              <option>Detroit Tigers</option><option>Kansas City Royals</option>
+              <option>Minnesota Twins</option>
+            </optgroup>
+            <optgroup label="AL West">
+              <option>Houston Astros</option><option>Los Angeles Angels</option>
+              <option>Athletics</option><option>Seattle Mariners</option>
+              <option>Texas Rangers</option>
+            </optgroup>
+            <optgroup label="NL East">
+              <option>Atlanta Braves</option><option>Miami Marlins</option>
+              <option>New York Mets</option><option>Philadelphia Phillies</option>
+              <option>Washington Nationals</option>
+            </optgroup>
+            <optgroup label="NL Central">
+              <option>Chicago Cubs</option><option>Cincinnati Reds</option>
+              <option>Milwaukee Brewers</option><option>Pittsburgh Pirates</option>
+              <option>St. Louis Cardinals</option>
+            </optgroup>
+            <optgroup label="NL West">
+              <option>Arizona Diamondbacks</option><option>Colorado Rockies</option>
+              <option>Los Angeles Dodgers</option><option>San Diego Padres</option>
+              <option>San Francisco Giants</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Bettor Name</label>
+          <input id="pm-bettor" type="text" placeholder="e.g. Kevin" required list="bettor-list" autocomplete="off" />
+        </div>
+        <div class="modal-row" style="grid-template-columns:1fr 1fr;">
+          <div class="form-group">
+            <label>Will / Won't</label>
+            <select id="pm-ou" required>
+              <option value="over">Will</option>
+              <option value="under">Won't</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Designation</label>
+            <select id="pm-designation" required>
+              <option value="">Select…</option>
+              <option value="wins_division">Win Division</option>
+              <option value="makes_playoffs">Make Playoffs</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-row" style="grid-template-columns:1fr 1fr;">
+          <div class="form-group">
+            <label>Juice</label>
+            <input id="pm-line" type="number" step="any" placeholder="-110" required />
+          </div>
+          <div class="form-group">
+            <label>Amount ($)</label>
+            <input id="pm-amount" type="number" step="any" min="0" placeholder="100" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="submit" id="playoff-submit-btn" class="btn btn-primary" style="flex:1;">Add Bet</button>
+        <button type="button" class="btn btn-ghost" onclick="closePlayoffModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<datalist id="bettor-list"></datalist>
+
+<!-- ============================================================ -->
+<!-- JavaScript                                                    -->
+<!-- ============================================================ -->
+<script>
+  const READONLY = {{ readonly|tojson }};
+
+  let allBets = [];
+  let standingsMap = {};
+  let editingBetId = null;
+
+  const DIVISION_ORDER = {
+    'American League East': 0, 'American League Central': 1, 'American League West': 2,
+    'National League East': 3, 'National League Central': 4, 'National League West': 5,
+  };
+
+  function betDivOrder(b) {
+    const rec = standingsMap[b.team];
+    return rec ? (DIVISION_ORDER[rec.division] ?? 99) : 99;
+  }
+
+  // ---- Boot ----
+  async function boot() {
+    await Promise.all([loadStandings(), loadBets()]);
+  }
+
+  // ---- Tabs ----
+  function switchTab(name, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  function handleUnauth(res) {
+    if (res.status === 401) { window.location = '/login'; return true; }
+    return false;
+  }
+
+  // ---- Standings ----
+  async function loadStandings() {
+    try {
+      const res = await fetch('/api/standings');
+      if (handleUnauth(res)) return;
+      processStandings(await res.json());
+    } catch (e) { console.error('Standings load failed', e); }
+  }
+
+  function processStandings(data) {
+    standingsMap = {};
+    (data.standings || []).forEach(t => { standingsMap[t.team] = t; });
+    const luEl = document.getElementById('last-updated');
+    if (data.last_updated) {
+      const d = new Date(data.last_updated);
+      const ageHours = (Date.now() - d.getTime()) / 3600000;
+      luEl.textContent = 'Updated ' + d.toLocaleDateString() + ' ' +
+        d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      luEl.style.color = ageHours > 12 ? 'var(--loss)' : ageHours > 4 ? 'var(--push)' : '';
+    } else {
+      luEl.textContent = 'Standings not yet fetched';
+      luEl.style.color = 'var(--push)';
+    }
+    renderStandings(data.standings || []);
+    if (data.bets_updated && data.bets_updated.length > 0) loadBets();
+    else renderBets();
+  }
+
+  function renderStandings(standings) {
+    const container = document.getElementById('standings-container');
+    if (!standings.length) {
+      container.innerHTML = `<div class="empty-state"><p>No standings. Click "Refresh Standings".</p></div>`;
+      return;
+    }
+    const divMap = {};
+    standings.forEach(t => { (divMap[t.division] = divMap[t.division] || []).push(t); });
+
+    function buildDivCard(divName) {
+      const teams = divMap[divName] || [];
+      const rows = teams.map(t => {
+        const badge = t.playoff_badge;
+        const streakCls = t.streak && t.streak.startsWith('W') ? 'streak-w' : 'streak-l';
+        const badgeHtml = badge === 'DIV'
+          ? '<span class="pb pb-div">DIV</span>'
+          : badge ? `<span class="pb pb-wc">${badge}</span>` : '';
+        return `<tr class="${badge ? 'in-playoffs' : ''}">
+          <td style="width:36px">${badgeHtml}</td>
+          <td style="font-weight:700">${t.abbreviation}</td>
+          <td style="font-weight:600">${t.wins}</td>
+          <td>${t.losses}</td>
+          <td>${t.pct}</td>
+          <td style="color:var(--muted)">${t.gb}</td>
+          <td class="${streakCls}">${t.streak || '—'}</td>
+          <td style="color:var(--muted)">${t.last10 || '—'}</td>
+        </tr>`;
+      }).join('');
+      const shortName = divName.replace('American League ', 'AL ').replace('National League ', 'NL ');
+      return `<div class="division-card">
+        <div class="division-header">${shortName}</div>
+        <table class="standings-table">
+          <thead><tr>
+            <th></th><th>Team</th><th>W</th><th>L</th>
+            <th>PCT</th><th>GB</th><th>Strk</th><th>L10</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    const alDivs = ['American League East','American League Central','American League West'];
+    const nlDivs = ['National League East','National League Central','National League West'];
+
+    container.innerHTML =
+      `<div class="league-section">
+        <h3>American League</h3>
+        <div class="standings-grid">${alDivs.map(buildDivCard).join('')}</div>
+      </div>
+      <div class="league-section">
+        <h3>National League</h3>
+        <div class="standings-grid">${nlDivs.map(buildDivCard).join('')}</div>
+      </div>`;
+  }
+
+  async function refreshStandings() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Refreshing…';
+    try {
+      const res = await fetch('/api/refresh', { method: 'POST' });
+      if (!res.ok) { alert('Refresh failed: ' + (await res.json()).error); return; }
+      processStandings(await res.json());
+    } catch (e) { alert('Network error: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = 'Refresh Standings'; }
+  }
+
+  // ---- Bets ----
+  async function loadBets() {
+    try {
+      const res = await fetch('/api/bets');
+      if (handleUnauth(res)) return;
+      allBets = await res.json();
+      updateBettorDatalist();
+      renderBets();
+    } catch (e) { console.error('Bets load failed', e); }
+  }
+
+  function updateBettorDatalist() {
+    const names = [...new Set(allBets.map(b => b.bettor))].sort();
+    document.getElementById('bettor-list').innerHTML =
+      names.map(n => `<option value="${escAttr(n)}">`).join('');
+  }
+
+  // ---- Helpers ----
+  function calcProfit(bet) {
+    if (!bet.amount) return 0;
+    return bet.line < 0
+      ? bet.amount * (100 / Math.abs(bet.line))
+      : bet.amount * (bet.line / 100);
+  }
+
+  function isOnPace(b) {
+    const rec = standingsMap[b.team];
+    if (!rec) return false;
+    if ((b.bet_type || 'win_total') === 'playoff') {
+      const badge = rec.playoff_badge;
+      const onTrack = b.designation === 'wins_division' ? badge === 'DIV' : ['DIV','WC1','WC2','WC3'].includes(badge);
+      return b.over_under === 'under' ? !onTrack : onTrack;
+    }
+    if (!rec.games_played) return false;
+    const pace = (rec.wins / rec.games_played) * 162;
+    return b.over_under === 'over' ? pace > b.ou_number : pace < b.ou_number;
+  }
+
+  function fmt$(n, showSign) {
+    const abs = Math.abs(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    if (showSign) return (n >= 0 ? '+' : '−') + '$' + abs;
+    return (n < 0 ? '−' : '') + '$' + abs;
+  }
+
+  // ---- Render bets (per-bettor, 2-col side-by-side, reverse alpha) ----
+  function renderBets() {
+    const f = {
+      bettor: document.getElementById('filter-bettor').value.trim().toLowerCase(),
+      team:   document.getElementById('filter-team').value.trim().toLowerCase(),
+      result: document.getElementById('filter-result').value,
+    };
+    const filtered = allBets.filter(b => {
+      if (f.bettor && !b.bettor.toLowerCase().includes(f.bettor)) return false;
+      if (f.team   && !b.team.toLowerCase().includes(f.team))     return false;
+      if (f.result && b.result !== f.result)                       return false;
+      return true;
+    });
+
+    const container = document.getElementById('bets-container');
+    if (!filtered.length) {
+      container.innerHTML = `<div class="empty-state"><p>No bets found.</p></div>`;
+      return;
+    }
+
+    // Group by bettor, sorted reverse-lexicographically (Z → A)
+    const bettorMap = {};
+    filtered.forEach(b => {
+      (bettorMap[b.bettor] = bettorMap[b.bettor] || []).push(b);
+    });
+    const bettorOrder = Object.keys(bettorMap).sort((a, b) => b.localeCompare(a));
+
+    container.innerHTML = `<div class="bets-grid">` +
+      bettorOrder.map(bettor => {
+        const bets = bettorMap[bettor];
+
+        // Per-bettor financials
+        let actual = 0, atRisk = 0, projectedProfit = 0;
+        bets.forEach(b => {
+          if (b.result === 'win')       actual += calcProfit(b);
+          else if (b.result === 'loss') actual -= (b.amount || 0);
+          else if (b.result === 'pending') {
+            atRisk += (b.amount || 0);
+            if (isOnPace(b)) projectedProfit += calcProfit(b);
+            else             projectedProfit -= (b.amount || 0);
+          }
+        });
+
+        const aColor = actual >= 0 ? 'var(--win)' : 'var(--loss)';
+        const rColor = atRisk > 0 ? 'var(--loss)' : 'var(--muted)';
+
+        const sortedBets = bets.slice().sort((a, b) => {
+          const dA = betDivOrder(a), dB = betDivOrder(b);
+          if (dA !== dB) return dA - dB;
+          return a.team.localeCompare(b.team);
+        });
+        const rows = sortedBets.map(b => renderBetRow(b)).join('');
+
+        return `<div class="bettor-section">
+          <div class="bettor-name-bar">${escHtml(bettor)}</div>
+          <div class="bettor-stat-row">
+            <div class="bettor-stat">
+              <span class="bs-label">Actual</span>
+              <span class="bs-value" style="color:${aColor}">${fmt$(actual, true)}</span>
+            </div>
+            <div class="bettor-stat">
+              <span class="bs-label">At Risk</span>
+              <span class="bs-value" style="color:${rColor}">${atRisk > 0 ? fmt$(-atRisk, true) : '—'}</span>
+            </div>
+            <div class="bettor-stat">
+              <span class="bs-label">Projected Profit</span>
+              <span class="bs-value" style="color:${projectedProfit >= 0 ? 'var(--win)' : 'var(--loss)'}">
+                ${fmt$(projectedProfit, true)}
+              </span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                <th>Team</th><th>Bet</th><th>Pace</th><th>Amount</th>
+                <th>Juice</th><th>Winnings</th><th>Result</th>${READONLY ? '' : '<th></th>'}
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join('') + `</div>`;
+  }
+
+  function renderBetRow(b) {
+    const rec = standingsMap[b.team];
+    const recordStr = rec ? `${rec.wins}-${rec.losses}` : '—';
+    const betType = b.bet_type || 'win_total';
+
+    // Bet cell
+    let betCell;
+    if (betType === 'playoff') {
+      const action = b.designation === 'wins_division' ? 'Win Division' : 'Make Playoffs';
+      const dir = b.over_under === 'under' ? "Won't " : 'Will ';
+      betCell = `<span class="playoff-designation">${dir}${action}</span>`;
+    } else {
+      betCell = `<span class="ou-badge ${b.over_under}">${b.over_under}</span> ${b.ou_number}`;
+    }
+
+    // Pace cell
+    let paceHtml, onPace;
+    if (betType === 'playoff') {
+      const badge = rec ? rec.playoff_badge : null;
+      const onTrack = b.designation === 'wins_division' ? badge === 'DIV' : ['DIV','WC1','WC2','WC3'].includes(badge);
+      onPace = b.over_under === 'under' ? !onTrack : onTrack;
+      paceHtml = `<span style="color:${onPace ? 'var(--win)' : 'var(--loss)'};font-weight:700">${onPace ? 'IN' : 'OUT'}</span>`;
+    } else {
+      const pace = rec && rec.games_played > 0 ? ((rec.wins / rec.games_played) * 162).toFixed(1) : null;
+      const paceNum = parseFloat(pace);
+      onPace = !isNaN(paceNum) && (b.over_under === 'over' ? paceNum > b.ou_number : paceNum < b.ou_number);
+      const pc = isNaN(paceNum) ? 'var(--muted)' : (onPace ? 'var(--win)' : 'var(--loss)');
+      paceHtml = `<span style="color:${pc};font-weight:600">${pace || '—'}</span>`;
+    }
+
+    // Winnings (only for pending on-pace bets)
+    const winningsHtml = (onPace && b.amount && b.result === 'pending')
+      ? `<span style="color:var(--win);font-weight:600">${fmt$(calcProfit(b), true)}</span>`
+      : '—';
+
+    const amountStr = b.amount
+      ? '$' + Number(b.amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})
+      : '—';
+
+    const editIcon = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:inline;vertical-align:middle"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Z"/></svg>`;
+    const actionCell = READONLY ? '' : `<td style="white-space:nowrap">
+        <button class="btn btn-sm btn-ghost" data-id="${b.id}" onclick="editBet(+this.dataset.id)" title="Edit" style="margin-right:4px;">${editIcon}</button>
+        <button class="btn btn-sm btn-del" data-id="${b.id}" onclick="deleteBet(+this.dataset.id)" title="Delete">✕</button>
+      </td>`;
+
+    return `<tr id="bet-row-${b.id}">
+      <td class="team-cell">${escHtml(b.team)}<span class="record-badge">${recordStr}</span></td>
+      <td>${betCell}</td>
+      <td>${paceHtml}</td>
+      <td style="white-space:nowrap">${amountStr}</td>
+      <td style="color:var(--muted)">${formatJuice(b.line)}</td>
+      <td>${winningsHtml}</td>
+      <td><span class="result-badge ${b.result}">${b.result}</span></td>
+      ${actionCell}
+    </tr>`;
+  }
+
+  function editBet(id) {
+    const bet = allBets.find(b => b.id === id);
+    if (!bet) return;
+    if ((bet.bet_type || 'win_total') === 'playoff') openPlayoffModal(bet);
+    else openWinTotalModal(bet);
+  }
+
+  async function deleteBet(id) {
+    if (!confirm('Delete this bet?')) return;
+    try {
+      await fetch(`/api/bets/${id}`, { method: 'DELETE' });
+      allBets = allBets.filter(b => b.id !== id);
+      renderBets();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+  }
+
+  // ---- Win Total Modal ----
+  function openWinTotalModal(bet) {
+    editingBetId = bet ? bet.id : null;
+    document.getElementById('modal-title').textContent = bet ? 'Edit Bet' : 'Add Win Total Bet';
+    document.getElementById('modal-submit-btn').textContent = bet ? 'Save Changes' : 'Add Bet';
+    if (bet) {
+      document.getElementById('f-team').value   = bet.team;
+      document.getElementById('f-bettor').value = bet.bettor;
+      document.getElementById('f-ou').value     = bet.over_under;
+      document.getElementById('f-number').value = bet.ou_number;
+      document.getElementById('f-line').value   = bet.line;
+      document.getElementById('f-amount').value = bet.amount > 0 ? bet.amount : '';
+    }
+    document.getElementById('modal-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('f-team').focus(), 30);
+  }
+
+  function closeWinTotalModal(e) {
+    if (e && e.target !== document.getElementById('modal-overlay')) return;
+    document.getElementById('modal-overlay').style.display = 'none';
+    document.getElementById('bet-form').reset();
+    document.getElementById('form-flash').style.display = 'none';
+    editingBetId = null;
+  }
+
+  async function submitWinTotalBet(e) {
+    e.preventDefault();
+    const flash = document.getElementById('form-flash');
+    flash.style.display = 'none';
+    const amountVal = parseFloat(document.getElementById('f-amount').value);
+    const payload = {
+      team:       document.getElementById('f-team').value,
+      bettor:     document.getElementById('f-bettor').value.trim(),
+      over_under: document.getElementById('f-ou').value,
+      ou_number:  parseFloat(document.getElementById('f-number').value),
+      line:       parseFloat(document.getElementById('f-line').value),
+      amount:     isNaN(amountVal) ? 0 : amountVal,
+    };
+    try {
+      let res, bet;
+      if (editingBetId) {
+        res = await fetch(`/api/bets/${editingBetId}`, {
+          method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) { showFlash(flash, 'error', (await res.json()).error || 'Update failed.'); return; }
+        bet = await res.json();
+        const idx = allBets.findIndex(b => b.id === editingBetId);
+        if (idx !== -1) allBets[idx] = bet;
+      } else {
+        res = await fetch('/api/bets', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) { showFlash(flash, 'error', (await res.json()).error || 'Save failed.'); return; }
+        bet = await res.json();
+        allBets.unshift(bet);
+      }
+      renderBets();
+      document.getElementById('modal-overlay').style.display = 'none';
+      document.getElementById('bet-form').reset();
+      editingBetId = null;
+    } catch (err) { showFlash(flash, 'error', 'Network error: ' + err.message); }
+  }
+
+  // ---- Playoff Modal ----
+  let editingPlayoffBetId = null;
+
+  function openPlayoffModal(teamOrBet) {
+    const isBet = teamOrBet && typeof teamOrBet === 'object';
+    editingPlayoffBetId = isBet ? teamOrBet.id : null;
+    document.getElementById('pm-team').value        = isBet ? teamOrBet.team        : (teamOrBet || '');
+    document.getElementById('pm-bettor').value      = isBet ? teamOrBet.bettor      : '';
+    document.getElementById('pm-ou').value          = isBet ? teamOrBet.over_under  : 'over';
+    document.getElementById('pm-designation').value = isBet ? (teamOrBet.designation || '') : '';
+    document.getElementById('pm-line').value        = isBet ? teamOrBet.line        : '';
+    document.getElementById('pm-amount').value      = isBet && teamOrBet.amount > 0 ? teamOrBet.amount : '';
+    document.getElementById('playoff-modal-title').textContent  = isBet ? 'Edit Playoff Bet' : 'Add Playoff Bet';
+    document.getElementById('playoff-submit-btn').textContent   = isBet ? 'Save Changes'     : 'Add Bet';
+    document.getElementById('playoff-modal-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('pm-bettor').focus(), 30);
+  }
+
+  function closePlayoffModal(e) {
+    if (e && e.target !== document.getElementById('playoff-modal-overlay')) return;
+    document.getElementById('playoff-modal-overlay').style.display = 'none';
+    document.getElementById('playoff-form').reset();
+    document.getElementById('playoff-flash').style.display = 'none';
+    editingPlayoffBetId = null;
+  }
+
+  async function submitPlayoffBet(e) {
+    e.preventDefault();
+    const flash = document.getElementById('playoff-flash');
+    flash.style.display = 'none';
+    const amountVal = parseFloat(document.getElementById('pm-amount').value);
+    const payload = {
+      bet_type:    'playoff',
+      team:        document.getElementById('pm-team').value,
+      bettor:      document.getElementById('pm-bettor').value.trim(),
+      designation: document.getElementById('pm-designation').value,
+      over_under:  document.getElementById('pm-ou').value,
+      line:        parseFloat(document.getElementById('pm-line').value),
+      amount:      isNaN(amountVal) ? 0 : amountVal,
+    };
+    try {
+      let res, bet;
+      if (editingPlayoffBetId) {
+        res = await fetch(`/api/bets/${editingPlayoffBetId}`, {
+          method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) { showFlash(flash, 'error', (await res.json()).error || 'Update failed.'); return; }
+        bet = await res.json();
+        const idx = allBets.findIndex(b => b.id === editingPlayoffBetId);
+        if (idx !== -1) allBets[idx] = bet;
+      } else {
+        res = await fetch('/api/bets', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) { showFlash(flash, 'error', (await res.json()).error || 'Save failed.'); return; }
+        bet = await res.json();
+        allBets.unshift(bet);
+      }
+      renderBets();
+      document.getElementById('playoff-modal-overlay').style.display = 'none';
+      document.getElementById('playoff-form').reset();
+      editingPlayoffBetId = null;
+    } catch (err) { showFlash(flash, 'error', 'Network error: ' + err.message); }
+  }
+
+  // ---- Escape closes any modal ----
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    ['modal-overlay','playoff-modal-overlay'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('bet-form').reset();
+    document.getElementById('playoff-form').reset();
+    document.getElementById('form-flash').style.display = 'none';
+    document.getElementById('playoff-flash').style.display = 'none';
+    editingBetId = null;
+    editingPlayoffBetId = null;
+  });
+
+  // ---- Utilities ----
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function escAttr(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  }
+  function formatJuice(n) {
+    if (n == null) return '—';
+    return n >= 0 ? '+' + n : String(n);
+  }
+  function showFlash(el, type, msg) {
+    el.className = 'flash ' + type;
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+  }
+
+  boot();
+</script>
+</body>
+</html>
