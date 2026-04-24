@@ -42,10 +42,19 @@ Set them before running:
 APP_PASSWORD=yourpassword SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))') uv run python main.py
 ```
 
+## Live Site
+
+| URL | Access |
+|---|---|
+| `https://ou-tracking.fly.dev` | Private (password required) |
+| `https://ou-tracking.fly.dev/public` | Public read-only |
+
 ## Deployment
 
-Hosted on [Fly.io](https://fly.io). See the `fly.toml` for configuration. The `data/` directory is mounted as a persistent volume so the database survives deploys.
+Hosted on [Fly.io](https://fly.io). The database lives on a persistent volume and survives deploys. To push an update:
 
 ```bash
 flyctl deploy
 ```
+
+The app auto-sleeps when idle and wakes on the next request.

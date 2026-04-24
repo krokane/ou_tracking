@@ -1,0 +1,26 @@
+# fly.toml app configuration file generated for ou-tracking on 2026-04-24T14:54:13-04:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'ou-tracking'
+primary_region = 'ewr'
+
+[build]
+
+[http_service]
+  internal_port = 5001
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '256mb'
+  cpus = 1
+  memory_mb = 256
+
+[[mounts]]
+  source = 'data_vol'
+  destination = '/app/data'
